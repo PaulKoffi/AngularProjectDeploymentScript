@@ -1,0 +1,49 @@
+---
+- name: Stop the service if it exist
+  command: pm2 stop {{service_name}}
+  become: true
+  ignore_errors: yes
+- name: Delete the service if it exxist
+  command: pm2 delete {{service_name}}
+  become: true
+  ignore_errors: yes
+- name: Cleanup
+  file:
+    path: "{{deployment_basedir}}"
+    state: absent
+  become: true
+- name: Create directory for service
+  file:
+    path: "{{deployment_basedir}}"
+    state: directory
+  become: true
+- name: Extract package to server
+  unarchive:
+    src: "{{artifact_package_file}}"
+    dest: "{{deployment_basedir}}"
+  become: true
+- name: Move service package to build based folder
+  command: mv {{deployment_basedir}}/package {{deployment_appdir}}
+  become: true
+- name: link service
+  file:
+    src: "{{deployment_appdir}}"
+    dest: "{{application_dir}}"
+    state: link
+  become: true
+- name: install node dependencies
+  shell: yarn install --production
+  become: true
+  args:
+    chdir: "{{application_dir}}"
+- include: sequelize_db_migration.yml
+- name: Start service
+  command: env NODE_ENV={{NODE_ENV}} pm2 start npm --name {{service_name}} --instances 1 --max-restarts 5 -- run start:prod
+  become: true
+  args:
+    chdir: "{{application_dir}}"
+- name: Save service settings
+  command: pm2 save
+  become: true
+  args:
+    chdir: "{{application_dir}}"
